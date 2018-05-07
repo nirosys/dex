@@ -24,6 +24,11 @@ type Config struct {
 	ClientSecret string `json:"clientSecret"`
 	RedirectURI  string `json:"redirectURI"`
 
+	// For manual configuration, when OIDC discovery is not available.
+	AuthURI  *string `json:"authURI,omitempty"`
+	TokenURI *string `json:"tokenURI,omitempty"`
+	JWKSURI  *string `json:"jwksURI,omitempty"`
+
 	// Causes client_secret to be passed as POST parameters instead of basic
 	// auth. This is specifically "NOT RECOMMENDED" by the OAuth2 RFC, but some
 	// providers require it.
@@ -78,19 +83,39 @@ func registerBrokenAuthHeaderProvider(url string) {
 func (c *Config) Open(id string, logger logrus.FieldLogger) (conn connector.Connector, err error) {
 	ctx, cancel := context.WithCancel(context.Background())
 
-	provider, err := oidc.NewProvider(ctx, c.Issuer)
-	if err != nil {
-		cancel()
-		return nil, fmt.Errorf("failed to get provider: %v", err)
+	var endpoint oauth2.Endpoint
+	var verifier *oidc.IDTokenVerifier
+
+	if c.AuthURI != nil && c.TokenURI != nil && c.JWKSURI != nil { // Manual Configuration
+		endpoint = oauth2.Endpoint{
+			AuthURL:  *c.AuthURI,
+			TokenURL: *c.TokenURI,
+		}
+		keySet := oidc.NewRemoteKeySet(ctx, *c.JWKSURI)
+		verifier = oidc.NewVerifier(
+			c.Issuer,
+			keySet,
+			&oidc.Config{ClientID: c.ClientID},
+		)
+	} else { // OIDC Discovery
+		provider, err := oidc.NewProvider(ctx, c.Issuer)
+		if err != nil {
+			cancel()
+			return nil, fmt.Errorf("failed to get provider: %v", err)
+		}
+		endpoint = provider.Endpoint()
+		verifier = provider.Verifier(
+			&oidc.Config{ClientID: c.ClientID},
+		)
 	}
 
 	if c.BasicAuthUnsupported != nil {
 		// Setting "basicAuthUnsupported" always overrides our detection.
 		if *c.BasicAuthUnsupported {
-			registerBrokenAuthHeaderProvider(provider.Endpoint().TokenURL)
+			registerBrokenAuthHeaderProvider(endpoint.TokenURL)
 		}
 	} else if knownBrokenAuthHeaderProvider(c.Issuer) {
-		registerBrokenAuthHeaderProvider(provider.Endpoint().TokenURL)
+		registerBrokenAuthHeaderProvider(endpoint.TokenURL)
 	}
 
 	scopes := []string{oidc.ScopeOpenID}
@@ -106,13 +131,11 @@ func (c *Config) Open(id string, logger logrus.FieldLogger) (conn connector.Conn
 		oauth2Config: &oauth2.Config{
 			ClientID:     clientID,
 			ClientSecret: c.ClientSecret,
-			Endpoint:     provider.Endpoint(),
+			Endpoint:     endpoint,
 			Scopes:       scopes,
 			RedirectURL:  c.RedirectURI,
 		},
-		verifier: provider.Verifier(
-			&oidc.Config{ClientID: clientID},
-		),
+		verifier:      verifier,
 		logger:        logger,
 		cancel:        cancel,
 		hostedDomains: c.HostedDomains,
