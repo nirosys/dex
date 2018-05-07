@@ -1,5 +1,5 @@
-hash: dda54feb39d5947ad20e9d583ccad9be02343dac0f52752944b7cd39668af7a4
-updated: 2017-12-20T16:05:04.690191111+01:00
+hash: 2b252fb416bcfc4e623637590b166efc5dce97f6ee7a5e9271e803b30cf06956
+updated: 2018-05-02T18:31:12.778817-05:00
 imports:
 - name: github.com/beevik/etree
   version: 4cd0dd976db869f817248477718071a28e978df0
@@ -23,7 +23,7 @@ imports:
   - pkg/tlsutil
   - pkg/transport
 - name: github.com/coreos/go-oidc
-  version: be73733bb8cc830d0205609b95d125215f8e9c70
+  version: 1180514eaf4d9f38d0d19eef639a1d695e066e72
 - name: github.com/coreos/license-bill-of-materials
   version: d70207c33a3c79a1c0479b208f8b7ab6215144c7
 - name: github.com/felixge/httpsnoop
